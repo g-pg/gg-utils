@@ -5,12 +5,11 @@ function getIndividualColorType(color: string): ColorType {
 		return 'hsl';
 	}
 
-	if (color.includes('#') || color.length === 6 || color.length === 3) {
-		return 'hex';
-	}
-
 	if (color.includes('rgb')) {
 		return 'rgb';
+	}
+	if (/^#?([0-9A-Fa-f]{3}){1,2}$/.test(color)) {
+		return 'hex';
 	}
 
 	throw new Error('Invalid color format');
@@ -29,11 +28,10 @@ function getColorsType(colors: ColorsArray): string {
 }
 
 function hexToHSLArray(hex: string): SplittedHSL {
-	// Remove the hash sign if it's included
-
 	hex = hex.replace(/^#/, '');
-	console.log('hex', hex);
-	let splittedHEX = hex.split('');
+	if (Number.isNaN(hex)) {
+		throw new Error('Invalid color format');
+	}
 
 	if (hex.length !== 3 && hex.length !== 6) {
 		throw new Error('Invalid hex format');
@@ -46,7 +44,6 @@ function hexToHSLArray(hex: string): SplittedHSL {
 			.join('');
 	}
 
-	// Parse hexadecimal values for red, green, and blue
 	var r = parseInt(hex.substring(0, 2), 16) / 255;
 	var g = parseInt(hex.substring(2, 4), 16) / 255;
 	var b = parseInt(hex.substring(4, 6), 16) / 255;
@@ -61,8 +58,8 @@ function hexToHSLArray(hex: string): SplittedHSL {
 
 	// Check for saturation
 	if (max === min) {
-		s = 0; // Achromatic
-		h = 0; // It doesn't matter what value it has
+		s = 0;
+		h = 0;
 	} else {
 		// Calculate the saturation
 		s = l > 0.5 ? (max - min) / (2 - max - min) : (max - min) / (max + min);
@@ -91,9 +88,14 @@ function rgbToHSLArray(rgb: string): SplittedHSL {
 	const rgbRegex = /^rgb\((\d+),\s*(\d+),\s*(\d+)\)$/;
 
 	const match = rgb.match(rgbRegex);
+
 	let r = 0;
 	let g = 0;
 	let b = 0;
+
+	if (!match) {
+		throw new Error('Invalid RGB format');
+	}
 
 	if (match) {
 		r = Number(match[1]) / 255;
@@ -108,7 +110,7 @@ function rgbToHSLArray(rgb: string): SplittedHSL {
 		l = (max + min) / 2;
 
 	if (max === min) {
-		h = s = 0; // achromatic
+		h = s = 0;
 	} else {
 		const d = max - min;
 		s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
@@ -132,11 +134,18 @@ function hslToHSLArray(hsl: string): SplittedHSL {
 	const cleanString = hsl.replaceAll('%', '');
 	const valuesStart = cleanString.indexOf('(');
 	const valuesEnd = cleanString.indexOf(')');
+	if (valuesStart === -1 || valuesEnd === -1) {
+		throw new Error('Invalid color format');
+	}
+
 	const [h, s, l] = cleanString
 		.substring(valuesStart + 1, valuesEnd)
 		.split(',')
 		.map((s) => Number(s.trim()));
 
+	if (cleanString.length !== 3) {
+		throw new Error('Invalid HSL format');
+	}
 	return [h, s, l];
 }
 
@@ -155,7 +164,7 @@ function convertToHSL(color: string): SplittedHSL {
 	}
 }
 
-function getBaseColorName(splittedHSL: SplittedHSL): string | void {
+function getBaseColorName(splittedHSL: SplittedHSL): string {
 	const [h, s, l] = splittedHSL;
 
 	const hShades = [
@@ -206,7 +215,7 @@ function getBaseColorName(splittedHSL: SplittedHSL): string | void {
 		}
 	];
 
-	let color = null;
+	let color = '';
 
 	if (l <= 10) {
 		return (color = 'black');
@@ -226,22 +235,21 @@ function getBaseColorName(splittedHSL: SplittedHSL): string | void {
 		}
 	}
 
-	if (!color) {
-		throw new Error('Something went wrong');
-	}
+	return color;
 }
 
-function modifyHSL(hsl: SplittedHSL, result: 'darker' | 'lighter'): SplittedHSL {
+function modifyHSL(hsl: SplittedHSL, result: 'darker' | 'lighter', step: number): SplittedHSL {
 	let [h, s, l] = hsl;
+	step = step * 10;
 
 	if (result === 'lighter') {
-		let newLightness = l + 10;
+		let newLightness = l + step;
 		if (newLightness > 100) newLightness = 100;
 		return [h, s, newLightness];
 	}
 
 	if (result === 'darker') {
-		let newLightness = l - 10;
+		let newLightness = l - step;
 		if (newLightness < 0) newLightness = 0;
 		return [h, s, newLightness];
 	}
@@ -249,13 +257,14 @@ function modifyHSL(hsl: SplittedHSL, result: 'darker' | 'lighter'): SplittedHSL 
 	return hsl;
 }
 
-function createVariables(colorsArray: ColorsArray, options?: CreateVariablesOptions): string {
-	const hslArray = colorsArray.map((color) => convertToHSL(color));
-
-	const variablesArray: string[] = [];
-
-	const format = options?.variableFormat || 'cl-';
-
+function formatVariable(
+	baseColorName: string,
+	tone: number,
+	hsl: SplittedHSL,
+	variableFormat?: string
+) {
+	const [h, s, l] = hsl;
+	const format = variableFormat || 'cl-';
 	const formatHSL = (hsl: SplittedHSL) => {
 		const formattedArray = hsl.map((n, i) => {
 			return i === 0 ? n : String(n) + '%';
@@ -263,25 +272,72 @@ function createVariables(colorsArray: ColorsArray, options?: CreateVariablesOpti
 		return `hsl(${formattedArray.join(', ')})`;
 	};
 
+	const writeTone = baseColorName != 'white' && baseColorName !== 'black';
+
+	return `--${format}${baseColorName}${writeTone ? '-' + tone : ''}: ${formatHSL(hsl)};`;
+}
+
+function removeRepetitions(variablesArray: string[]) {
+	const set = new Set(variablesArray);
+
+	let white = 0;
+	let black = 0;
+
+	set.forEach((v) => {
+		if (v.includes('white')) {
+			white++;
+			if (white > 1) set.delete(v);
+		}
+		if (v.includes('black')) {
+			black++;
+			if (black > 1) set.delete(v);
+		}
+	});
+	return Array.from(set);
+}
+export default function createVariables(
+	colorsArray: ColorsArray,
+	options?: CreateVariablesOptions
+): string | string[] {
+	const hslArray = colorsArray.map((color) => convertToHSL(color));
+
+	let variablesArray: string[] = [];
+
 	for (const hsl of hslArray) {
 		const [h, s, l] = hsl;
 		let baseColorName = getBaseColorName(hsl);
 
 		const tone = Math.floor(l / 10) * 100;
+		variablesArray.push(formatVariable(baseColorName, tone, hsl, options?.variableFormat));
 
-		variablesArray.push(`--${format}${baseColorName}-${tone}: ${formatHSL(hsl)};`);
+		if (options?.createShades?.create) {
+			let numberOfShades = options.createShades.number || 1;
 
-		if (options?.createShades) {
-			const lighterHSL = modifyHSL(hsl, 'lighter');
-			const darkerHSL = modifyHSL(hsl, 'darker');
-			variablesArray.unshift(
-				`--${format}${baseColorName}-${tone - 100}: ${formatHSL(lighterHSL)};`
-			);
-			variablesArray.push(`--${format}${baseColorName}-${tone + 100}: ${formatHSL(darkerHSL)};`);
+			for (let i = 0; i < numberOfShades; i++) {
+				let lighter = modifyHSL(hsl, 'lighter', i + 1);
+				let darker = modifyHSL(hsl, 'darker', i + 1);
+				variablesArray.push(
+					formatVariable(
+						getBaseColorName(lighter),
+						tone + 100 * (i + 1),
+						lighter,
+						options?.variableFormat
+					)
+				);
+				variablesArray.unshift(
+					formatVariable(
+						getBaseColorName(darker),
+						tone - 100 * (i + 1),
+						darker,
+						options?.variableFormat
+					)
+				);
+			}
 		}
 	}
 
-	return variablesArray.join('\n');
+	variablesArray = removeRepetitions(variablesArray);
+	return options?.returnFormat === 'array' ? variablesArray : variablesArray.join('\n');
 }
 
-export { hexToHSLArray as hexToHSL, getColorsType, getBaseColorName, createVariables };
+export { hexToHSLArray, getColorsType, getBaseColorName, createVariables };

@@ -1,4 +1,9 @@
-import { createVariables, getBaseColorName, getColorsType, hexToHSL } from './createCSSVariables';
+import {
+	createVariables,
+	getBaseColorName,
+	getColorsType,
+	hexToHSLArray
+} from './createCSSVariables';
 import { expect, test } from 'vitest';
 
 // test('Color types should be consistent', () => {
@@ -12,9 +17,9 @@ import { expect, test } from 'vitest';
 // });
 
 test('Should create variables', () => {
-	expect(createVariables(['04aa6d', 'rgb(39, 41, 53)'], { createShades: false })).toEqual(
-		'--cl--blue-500: hsl(0, 0, 0);'
-	);
+	expect(
+		createVariables(['04aa6d', 'rgb(39, 41, 53)'], { createShades: { create: true, number: 5 } })
+	).toEqual('--cl--blue-500: hsl(0, 0, 0);');
 });
 
 // test('Should return splittedHSL', () => {
